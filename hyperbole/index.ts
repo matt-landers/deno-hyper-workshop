@@ -4,7 +4,7 @@ export interface HyperboleRequest {
 }
 
 export interface HyperboleResponse {
-  send: (body: string, status?: number, headers?: HeadersInit) => void;
+  send: (body?: string, status?: number, headers?: HeadersInit) => void;
   json: (o: unknown, status?: number) => void;
 }
 
@@ -35,7 +35,7 @@ function hyperboleResponse(
   respondWith: (r: Response | Promise<Response>) => Promise<void>
 ): HyperboleResponse {
   return {
-    send(body: string, status?: number, headers?: HeadersInit) {
+    send(body?: string, status?: number, headers?: HeadersInit) {
       respondWith(new Response(body, { status: status ?? 200, headers }));
     },
     json(o: unknown, status?: number) {
@@ -60,30 +60,27 @@ export const Server = () => {
     all("*", handler);
   }
 
+  function processRequest(req: HyperboleRequest, res: HyperboleResponse) {
+    let handled = false;
+    for (const rh of requestHandlers) {
+      if (rh.path === "*" || rh.path === req.url.pathname) {
+        const { handler } = rh;
+        handler(req, res, async () => {});
+        handled = true;
+      }
+    }
+    if (!handled) {
+      res.send(undefined, 404);
+    }
+  }
+
   async function handleHttp(conn: Deno.Conn) {
     const httpConn = Deno.serveHttp(conn);
     try {
       for await (const { request, respondWith } of httpConn) {
-        const url = new URL(request.url);
-        let handled = false;
         const req = await hyperboleRequest(request);
         const res = hyperboleResponse(respondWith);
-        console.log(url.pathname);
-        for (const rh of requestHandlers) {
-          if (rh.path === "*" || rh.path === url.pathname) {
-            const { handler } = rh;
-            handler(req, res, async () => {});
-            handled = true;
-          }
-        }
-        if (!handled) {
-          respondWith(
-            new Response(null, {
-              status: 404,
-              headers: { "Cache-Control": "no-cache" },
-            })
-          );
-        }
+        processRequest(req, res);
       }
     } catch (e) {
       console.log(e);
