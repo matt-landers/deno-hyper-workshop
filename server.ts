@@ -4,7 +4,7 @@ for await (const c of tcp) {
 }
 
 async function handleHttp(conn: Deno.Conn) {
-  for await (const { request, respondWith } of Deno.serveHttp(conn)) {
+  for await (const { respondWith } of Deno.serveHttp(conn)) {
     respondWith(new Response("Hello World!"));
   }
 }
