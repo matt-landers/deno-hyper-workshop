@@ -2,8 +2,13 @@ import { Server } from "./hyperbole/index.ts";
 
 const server = Server();
 
-server.all("*", (_req, _res, next) => {
+server.all("*", (_req, res, next) => {
   console.log("Every request hits this.");
+
+  res.on('end', () => {
+    console.log('Response sent!');
+  });
+
   next();
 });
 

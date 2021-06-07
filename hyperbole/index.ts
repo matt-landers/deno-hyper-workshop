@@ -96,7 +96,6 @@ export const Server = (): HyperboleServer => {
         try {
           await handler(req, res, () => {
             resolve(true);
-            res.off("end");
             resolved = true;
           });
         } catch (e) {
