@@ -20,6 +20,8 @@ async function hyperboleRequest(request: Request): Promise<HyperboleRequest> {
   const raw = await request.body?.getReader().read();
   let body = decoder.decode(raw?.value);
 
+  const url = new URL(request.url);
+
   try {
     body = JSON.parse(body);
   } catch (_e) {
@@ -27,10 +29,10 @@ async function hyperboleRequest(request: Request): Promise<HyperboleRequest> {
   }
 
   return {
-    url: new URL(request.url),
+    url,
     body,
     method: request.method,
-    pathname: new URL(request.url).pathname,
+    pathname: url.pathname,
   };
 }
 
