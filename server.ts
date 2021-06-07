@@ -3,7 +3,6 @@ import { Server } from "./hyperbole/index.ts";
 const server = Server();
 
 server.all("*", (req, res, next) => {
-  console.log("Every request hits this.");
   const start = Date.now();
 
   res.on("end", () => {
@@ -15,18 +14,18 @@ server.all("*", (req, res, next) => {
 });
 
 server.all("/", (_req, res, _next) => {
-  console.log('Sending "Hello World!"');
   res.send("Hello World!");
+  console.log('Sending "Hello World!"');
 });
 
 server.all("/json", (_req, res, _next) => {
-  console.log('Sending { hello: "World!" }');
   res.json({ hello: "World!" });
+  console.log('Sending { hello: "World!" }');
 });
 
 server.all("/body", (req, res, _next) => {
-  console.log("Sending the body");
   res.json(req.body);
+  console.log("Sending the body");
 });
 
 await server.listen({ port: 3000 });
