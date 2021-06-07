@@ -2,16 +2,24 @@ import { Server } from "./hyperbole/index.ts";
 
 const server = Server();
 
-server.all("/", async (_req, res, _next) => {
-  await res.send("Hello World!");
+server.all("*", (_req, _res, next) => {
+  console.log("Every request hits this.");
+  next();
 });
 
-server.all("/json", async (_req, res, _next) => {
-  await res.json({ hello: "World!" });
+server.all("/", (_req, res, _next) => {
+  console.log('Sending "Hello World!"');
+  res.send("Hello World!");
 });
 
-server.all("/body", async (req, res, _next) => {
-  await res.json(req.body);
+server.all("/json", (_req, res, _next) => {
+  console.log('Sending { hello: "World!" }');
+  res.json({ hello: "World!" });
+});
+
+server.all("/body", (req, res, _next) => {
+  console.log("Sending the body");
+  res.json(req.body);
 });
 
 await server.listen({ port: 3000 });

@@ -1,74 +1,137 @@
+import { EventEmitter } from "https://deno.land/x/event@2.0.0/mod.ts";
+
 export interface HyperboleRequest {
   url: URL;
   body?: unknown | string;
 }
 
-export interface HyperboleResponse {
-  send: (body?: string, status?: number, headers?: HeadersInit) => void;
-  json: (o: unknown, status?: number) => void;
-}
-
-export type HyperboleNext = () => Promise<unknown>;
+export type HyperboleNext = () => unknown;
 
 export type HyperboleRequestHandler = (
   req: HyperboleRequest,
   res: HyperboleResponse,
   next: HyperboleNext
-) => Promise<unknown>;
+) => unknown;
 
 async function hyperboleRequest(request: Request): Promise<HyperboleRequest> {
   const decoder = new TextDecoder();
   const raw = await request.body?.getReader().read();
   let body = decoder.decode(raw?.value);
+
   try {
     body = JSON.parse(body);
   } catch (_e) {
     //ignore
   }
+
   return {
     url: new URL(request.url),
     body,
   };
 }
 
-function hyperboleResponse(
-  respondWith: (r: Response | Promise<Response>) => Promise<void>
-): HyperboleResponse {
-  return {
-    send(body?: string, status?: number, headers?: HeadersInit) {
-      respondWith(new Response(body, { status: status ?? 200, headers }));
-    },
-    json(o: unknown, status?: number) {
-      this.send(JSON.stringify(o), status ?? 200, {
-        "Content-Type": "application/json",
-      });
-    },
-  };
+export type Events = {
+  end: [];
+};
+
+class HyperboleResponse extends EventEmitter<Events> {
+  constructor(
+    private respondWith: (r: Response | Promise<Response>) => Promise<void>
+  ) {
+    super(0);
+  }
+
+  send(body?: string, status?: number, headers?: HeadersInit) {
+    this.respondWith(new Response(body, { status: status ?? 200, headers }));
+    this.emit("end");
+  }
+
+  json(o: unknown, status?: number) {
+    this.send(JSON.stringify(o), status ?? 200, {
+      "Content-Type": "application/json",
+    });
+  }
 }
 
-export const Server = () => {
+export interface HyperboleServer {
+  all(path: string, handler: HyperboleRequestHandler): unknown;
+  use(handler: HyperboleRequestHandler): unknown;
+  listen(options: { port: number }): unknown;
+}
+
+export const Server = (): HyperboleServer => {
   const requestHandlers: Array<{
     path: string;
     handler: HyperboleRequestHandler;
   }> = [];
+  const server = {
+    all,
+    use,
+    listen,
+  };
 
-  function all(path: string, handler: HyperboleRequestHandler) {
-    requestHandlers.push({ path, handler });
+  function callHandler(
+    req: HyperboleRequest,
+    res: HyperboleResponse,
+    handler: HyperboleRequestHandler
+  ) {
+    return new Promise<boolean>((resolve, reject) => {
+      let resolved = false;
+
+      // If res.send is called
+      (async () => {
+        try {
+          await res.once("end");
+          if (!resolved) {
+            resolve(false);
+            resolved = true;
+          }
+        } catch (e) {
+          reject(e);
+        }
+      })();
+
+      // call the handler
+      (async () => {
+        try {
+          await handler(req, res, () => {
+            resolve(true);
+            res.off("end");
+            resolved = true;
+          });
+        } catch (e) {
+          reject(e);
+        }
+      })();
+    });
   }
 
-  function use(handler: HyperboleRequestHandler) {
-    all("*", handler);
-  }
-
-  function processRequest(req: HyperboleRequest, res: HyperboleResponse) {
+  async function processRequest(req: HyperboleRequest, res: HyperboleResponse) {
     let handled = false;
+    let ended = false;
+
+    res.once("end", () => {
+      ended = true;
+    });
+
     for (const rh of requestHandlers) {
       if (rh.path === "*" || rh.path === req.url.pathname) {
-        const { handler } = rh;
-        handler(req, res, async () => {});
         handled = true;
+        const { handler } = rh;
+        let next = false;
+
+        try {
+          next = await callHandler(req, res, handler);
+        } catch (e) {
+          console.log(e);
+        }
+
+        if (!next || ended) {
+          break;
+        }
       }
     }
+
     if (!handled) {
       res.send(undefined, 404);
     }
@@ -79,23 +142,40 @@ export const Server = () => {
     try {
       for await (const { request, respondWith } of httpConn) {
         const req = await hyperboleRequest(request);
-        const res = hyperboleResponse(respondWith);
-        processRequest(req, res);
+        const res = new HyperboleResponse(respondWith);
+
+        // We do not need to await this because we won't do anything after
+        void processRequest(req, res);
       }
     } catch (e) {
       console.log(e);
     }
   }
 
-  async function listen(options: { port: number }) {
-    const tcp = Deno.listen({ port: options.port });
+  async function waitForConnection(tcp: Deno.Listener) {
     for await (const c of tcp) {
       handleHttp(c);
     }
   }
-  return {
-    all,
-    use,
-    listen,
-  };
+
+  function all(path: string, handler: HyperboleRequestHandler) {
+    requestHandlers.push({ path, handler });
+
+    return server;
+  }
+
+  function use(handler: HyperboleRequestHandler) {
+    all("*", handler);
+
+    return server;
+  }
+
+  function listen(options: { port: number }) {
+    const tcp = Deno.listen({ port: options.port });
+    waitForConnection(tcp);
+
+    return server;
+  }
+
+  return server;
 };
