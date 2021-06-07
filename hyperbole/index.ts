@@ -3,6 +3,8 @@ import { EventEmitter } from "https://deno.land/x/event@2.0.0/mod.ts";
 export interface HyperboleRequest {
   url: URL;
   body?: unknown | string;
+  method: string;
+  pathname: string;
 }
 
 export type HyperboleNext = () => unknown;
@@ -27,6 +29,8 @@ async function hyperboleRequest(request: Request): Promise<HyperboleRequest> {
   return {
     url: new URL(request.url),
     body,
+    method: request.method,
+    pathname: new URL(request.url).pathname,
   };
 }
 
