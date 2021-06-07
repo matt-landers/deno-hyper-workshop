@@ -17,15 +17,17 @@ export type HyperboleRequestHandler = (
 
 async function hyperboleRequest(request: Request): Promise<HyperboleRequest> {
   const decoder = new TextDecoder();
-  const raw = await request.body?.getReader().read();
-  let body = decoder.decode(raw?.value);
-
   const url = new URL(request.url);
+  let body;
 
-  try {
-    body = JSON.parse(body);
-  } catch (_e) {
-    //ignore
+  if (request.method !== "GET") {
+    const raw = await request.body?.getReader().read();
+    let body = decoder.decode(raw?.value);
+    try {
+      body = JSON.parse(body);
+    } catch (_e) {
+      //ignore
+    }
   }
 
   return {
