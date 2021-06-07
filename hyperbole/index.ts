@@ -48,8 +48,8 @@ class HyperboleResponse extends EventEmitter<Events> {
   }
 
   send(body?: string, status?: number, headers?: HeadersInit) {
-    this.respondWith(new Response(body, { status: status ?? 200, headers }));
     this.status = status ?? 200;
+    this.respondWith(new Response(body, { status: this.status, headers }));
     this.emit("end");
   }
 
