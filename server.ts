@@ -8,8 +8,7 @@ server.all("*", (req, res, next) => {
 
   res.on("end", () => {
     const duration = Date.now() - start;
-
-    console.log(`${req.method} ${req.pathname} ${duration}ms`);
+    console.log(`${res.status} ${req.method} ${req.pathname} ${duration}ms`);
   });
 
   next();

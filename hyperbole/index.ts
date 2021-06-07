@@ -39,6 +39,8 @@ export type Events = {
 };
 
 class HyperboleResponse extends EventEmitter<Events> {
+  public status = 200;
+
   constructor(
     private respondWith: (r: Response | Promise<Response>) => Promise<void>
   ) {
@@ -47,6 +49,7 @@ class HyperboleResponse extends EventEmitter<Events> {
 
   send(body?: string, status?: number, headers?: HeadersInit) {
     this.respondWith(new Response(body, { status: status ?? 200, headers }));
+    this.status = status ?? 200;
     this.emit("end");
   }
 
