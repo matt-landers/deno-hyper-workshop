@@ -149,16 +149,13 @@ export const Server = (): HyperboleServer => {
 
   async function handleHttp(conn: Deno.Conn) {
     const httpConn = Deno.serveHttp(conn);
-    try {
-      for await (const { request, respondWith } of httpConn) {
-        const req = await hyperboleRequest(request);
-        const res = new HyperboleResponse(respondWith);
 
-        // We do not need to await this because we won't do anything after
-        void processRequest(req, res);
-      }
-    } catch (e) {
-      console.log(e);
+    for await (const { request, respondWith } of httpConn) {
+      const req = await hyperboleRequest(request);
+      const res = new HyperboleResponse(respondWith);
+
+      // We do not need to await this because we won't do anything after
+      void processRequest(req, res);
     }
   }
 

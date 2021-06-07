@@ -2,7 +2,7 @@ import { Server } from "./hyperbole/index.ts";
 
 const server = Server();
 
-server.all("*", (req, res, next) => {
+server.use((req, res, next) => {
   const start = Date.now();
 
   res.on("end", () => {
