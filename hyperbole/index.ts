@@ -2,18 +2,10 @@ import { EventEmitter } from "https://deno.land/x/event@2.0.0/mod.ts";
 
 export interface HyperboleRequest {
   url: URL;
-  body?: unknown | string;
+  body?: BodyInit;
   method: string;
   pathname: string;
 }
-
-export type HyperboleNext = () => unknown;
-
-export type HyperboleRequestHandler = (
-  req: HyperboleRequest,
-  res: HyperboleResponse,
-  next: HyperboleNext
-) => unknown;
 
 async function hyperboleRequest(request: Request): Promise<HyperboleRequest> {
   const decoder = new TextDecoder();
@@ -22,7 +14,8 @@ async function hyperboleRequest(request: Request): Promise<HyperboleRequest> {
 
   if (request.method !== "GET") {
     const raw = await request.body?.getReader().read();
-    let body = decoder.decode(raw?.value);
+    body = decoder.decode(raw?.value);
+
     try {
       body = JSON.parse(body);
     } catch (_e) {
@@ -38,26 +31,32 @@ async function hyperboleRequest(request: Request): Promise<HyperboleRequest> {
   };
 }
 
-export type Events = {
+export type HyperboleNext = () => unknown;
+
+export type HyperboleRequestHandler = (
+  req: HyperboleRequest,
+  res: HyperboleResponse,
+  next: HyperboleNext
+) => unknown;
+
+export type HyperboleEvents = {
   end: [];
 };
 
-class HyperboleResponse extends EventEmitter<Events> {
+class HyperboleResponse extends EventEmitter<HyperboleEvents> {
   public status = 200;
 
-  constructor(
-    private respondWith: (r: Response | Promise<Response>) => Promise<void>
-  ) {
+  constructor(private respondWith: Deno.RequestEvent["respondWith"]) {
     super(0);
   }
 
-  send(body?: string, status?: number, headers?: HeadersInit) {
+  public send(body?: string, status?: number, headers?: HeadersInit) {
     this.status = status ?? 200;
     this.respondWith(new Response(body, { status: this.status, headers }));
     this.emit("end");
   }
 
-  json(o: unknown, status?: number) {
+  public json(o: unknown, status?: number) {
     this.send(JSON.stringify(o), status ?? 200, {
       "Content-Type": "application/json",
     });
@@ -65,16 +64,16 @@ class HyperboleResponse extends EventEmitter<Events> {
 }
 
 export interface HyperboleServer {
-  all(path: string, handler: HyperboleRequestHandler): unknown;
-  use(handler: HyperboleRequestHandler): unknown;
-  listen(options: { port: number }): unknown;
+  all(path: string, handler: HyperboleRequestHandler): HyperboleServer;
+  use(handler: HyperboleRequestHandler): HyperboleServer;
+  listen(port: number): HyperboleServer;
 }
 
-export const Server = (): HyperboleServer => {
-  const requestHandlers: Array<{
+export function Server(): HyperboleServer {
+  const requestHandlers: {
     path: string;
     handler: HyperboleRequestHandler;
-  }> = [];
+  }[] = [];
   const server = {
     all,
     use,
@@ -126,8 +125,8 @@ export const Server = (): HyperboleServer => {
 
     for (const rh of requestHandlers) {
       if (rh.path === "*" || rh.path === req.url.pathname) {
-        handled = true;
         const { handler } = rh;
+        handled = true;
         let next = false;
 
         try {
@@ -147,6 +146,13 @@ export const Server = (): HyperboleServer => {
     }
   }
 
+  async function waitForConnection(port: number) {
+    const tcp = Deno.listen({ port });
+    for await (const c of tcp) {
+      handleHttp(c);
+    }
+  }
+
   async function handleHttp(conn: Deno.Conn) {
     const httpConn = Deno.serveHttp(conn);
 
@@ -159,10 +165,10 @@ export const Server = (): HyperboleServer => {
     }
   }
 
-  async function waitForConnection(tcp: Deno.Listener) {
-    for await (const c of tcp) {
-      handleHttp(c);
-    }
+  function listen(port: number) {
+    waitForConnection(port);
+
+    return server;
   }
 
   function all(path: string, handler: HyperboleRequestHandler) {
@@ -177,12 +183,5 @@ export const Server = (): HyperboleServer => {
     return server;
   }
 
-  function listen(options: { port: number }) {
-    const tcp = Deno.listen({ port: options.port });
-    waitForConnection(tcp);
-
-    return server;
-  }
-
   return server;
-};
+}
